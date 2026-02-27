@@ -49,5 +49,11 @@ func (p *purger) Purge(ctx context.Context) ([]LockStatus, error) {
 		allUnlocked = append(allUnlocked, unlocked...)
 	}
 
+	// Garbage collect unused lock records
+	err = p.client.GC(ctx)
+	if err != nil {
+		return allUnlocked, err
+	}
+
 	return allUnlocked, nil
 }

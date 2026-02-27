@@ -610,6 +610,23 @@ func (c *Client) Renew(ctx context.Context, lockId string, ttl uint) ([]LockStat
 	return statuses, nil
 }
 
+// GC removes all lock entries in the collection that have expired
+// Specifically, this removes lock entries where exclusive.lockId is nil AND shared.count is 0
+func (c *Client) GC(ctx context.Context) error {
+	// Get all empty locks and remove
+	selector := bson.M{
+		"exclusive.lockId": nil,
+		"shared.count":     0,
+	}
+
+	_, err := c.collection.DeleteMany(ctx, selector)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // ------------------------------------------------------------------------- //
 
 // xUnlock unlocks an exclusive lock on a resource.
