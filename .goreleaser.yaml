@@ -1,11 +1,11 @@
 version: 2
 
-project_name: go
+project_name: mongo-lock
 
 release:
   github:
     owner: foomo
-    name: go
+    name: mongo-lock
   prerelease: auto
 
 builds:
