@@ -9,10 +9,9 @@ import (
 	"sort"
 	"time"
 
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 const (
@@ -30,9 +29,6 @@ var (
 
 	// ErrLockNotFound is returned when a lock cannot be found.
 	ErrLockNotFound = errors.New("unable to find lock")
-
-	UPSERT    = true
-	ReturnDoc = options.After
 )
 
 // LockDetails contains fields that are used when creating a lock.
@@ -70,7 +66,7 @@ type LockStatus struct {
 	// lock does not have a TTL.
 	TTL int64
 	// The Mongo ObjectId of the lock. Only used internally for sorting.
-	objectId primitive.ObjectID
+	objectId bson.ObjectID
 }
 
 // LockStatusesByCreatedAtDesc is a slice of LockStatus structs, ordered by
@@ -92,15 +88,15 @@ type Filter struct {
 // lock represents a lock object stored in Mongo.
 type lock struct {
 	// Use pointers so we can store null values in the db.
-	LockId    *string            `bson:"lockId"`
-	Owner     *string            `bson:"owner"`
-	Host      *string            `bson:"host"`
-	Comment   *string            `bson:"comment"`
-	CreatedAt *time.Time         `bson:"createdAt"`
-	RenewedAt *time.Time         `bson:"renewedAt"`
-	ExpiresAt *time.Time         `bson:"expiresAt"` // How TTLs are stored internally.
-	Acquired  bool               `bson:"acquired"`
-	ObjectId  primitive.ObjectID `bson:"_id,omitempty"`
+	LockId    *string       `bson:"lockId"`
+	Owner     *string       `bson:"owner"`
+	Host      *string       `bson:"host"`
+	Comment   *string       `bson:"comment"`
+	CreatedAt *time.Time    `bson:"createdAt"`
+	RenewedAt *time.Time    `bson:"renewedAt"`
+	ExpiresAt *time.Time    `bson:"expiresAt"` // How TTLs are stored internally.
+	Acquired  bool          `bson:"acquired"`
+	ObjectId  bson.ObjectID `bson:"_id,omitempty"`
 }
 
 // sharedLocks represents a slice of shared locks stored in Mongo.
@@ -141,7 +137,7 @@ func (c *Client) CreateIndexes(ctx context.Context) error {
 		// Required.
 		{
 			Keys:    bson.M{"resource": 1},
-			Options: options.Index().SetUnique(true).SetBackground(false).SetSparse(true),
+			Options: options.Index().SetUnique(true).SetSparse(true),
 		},
 
 		// Optional.
@@ -194,13 +190,13 @@ func (c *Client) XLock(ctx context.Context, resourceName, lockId string, ld Lock
 		ctx,
 		selector,
 		r,
-		&options.FindOneAndUpdateOptions{Upsert: &UPSERT, ReturnDocument: &ReturnDoc})
+		options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.After))
 
 	rr := map[string]any{}
 
 	err := result.Decode(rr)
 	if err != nil {
-		if isDup(err) {
+		if mongo.IsDuplicateKeyError(err) {
 			return ErrAlreadyLocked
 		}
 
@@ -257,13 +253,13 @@ func (c *Client) SLock(ctx context.Context, resourceName, lockId string, ld Lock
 		ctx,
 		selector,
 		change,
-		&options.FindOneAndUpdateOptions{Upsert: &UPSERT, ReturnDocument: &ReturnDoc})
+		options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.After))
 
 	rr := map[string]any{}
 
 	err := result.Decode(rr)
 	if err != nil {
-		if isDup(err) {
+		if mongo.IsDuplicateKeyError(err) {
 			return ErrAlreadyLocked
 		}
 
@@ -294,11 +290,12 @@ func (c *Client) Unlock(ctx context.Context, lockId string) ([]LockStatus, error
 		return []LockStatus{}, err
 	}
 
-	// Sort the lock statuses by most recent CreatedAt date first.
-	var sortedLocks LockStatusesByCreatedAtDesc = locks
+	// Sort the lock statuses by the most recent CreatedAt date first.
+	sortedLocks := LockStatusesByCreatedAtDesc(locks)
+
 	sort.Sort(sortedLocks)
 
-	unlocked := []LockStatus{}
+	var unlocked []LockStatus
 
 	for _, lock := range sortedLocks {
 		var err error
@@ -368,7 +365,7 @@ func (c *Client) Status(ctx context.Context, f Filter) ([]LockStatus, error) {
 		// Subtract 1 second since TTLs are rounded down to the nearest
 		// second. So if TTLlt = 1, we want to return everything with a
 		// max TTL of 0 (ttlTime = time.Now()).
-		ttlTime := time.Now().Add(time.Duration(f.TTLlt-1) * time.Second)
+		ttlTime := time.Now().Add(time.Duration(int64(f.TTLlt-1)) * time.Second) //nolint:gosec // TTL seconds won't overflow int64
 		xQuery["exclusive.expiresAt"] = bson.M{
 			"$lt": ttlTime,
 		}
@@ -384,7 +381,7 @@ func (c *Client) Status(ctx context.Context, f Filter) ([]LockStatus, error) {
 	}
 
 	if f.TTLgte > 0 {
-		ttlTime := time.Now().Add(time.Duration(f.TTLgte) * time.Second)
+		ttlTime := time.Now().Add(time.Duration(int64(f.TTLgte)) * time.Second) //nolint:gosec // TTL seconds won't overflow int64
 		xQuery["exclusive.expiresAt"] = bson.M{
 			"$gte": ttlTime,
 		}
@@ -529,7 +526,7 @@ func (c *Client) Renew(ctx context.Context, lockId string, ttl uint) ([]LockStat
 	}
 
 	renewedAt := time.Now()
-	newExpiration := renewedAt.Add(time.Duration(ttl) * time.Second)
+	newExpiration := renewedAt.Add(time.Duration(int64(ttl)) * time.Second) //nolint:gosec // TTL seconds won't overflow int64
 
 	// Only renew locks that have a TTL of at least 1 second. We MUST do
 	// this to prevent a race condition that could otherwise happen between
@@ -549,7 +546,7 @@ func (c *Client) Renew(ctx context.Context, lockId string, ttl uint) ([]LockStat
 				"resource":         lock.Resource,
 				"exclusive.lockId": lock.LockId,
 				"exclusive.expiresAt": bson.M{
-					"$gt": primitive.NewDateTimeFromTime(minExpiresAt),
+					"$gt": bson.NewDateTimeFromTime(minExpiresAt),
 				},
 			}
 
@@ -568,7 +565,7 @@ func (c *Client) Renew(ctx context.Context, lockId string, ttl uint) ([]LockStat
 					"$elemMatch": bson.M{
 						"lockId": lock.LockId,
 						"expiresAt": bson.M{
-							"$gt": primitive.NewDateTimeFromTime(minExpiresAt),
+							"$gt": bson.NewDateTimeFromTime(minExpiresAt),
 						},
 					},
 				},
@@ -592,7 +589,7 @@ func (c *Client) Renew(ctx context.Context, lockId string, ttl uint) ([]LockStat
 			ctx,
 			selector,
 			change,
-			&options.FindOneAndUpdateOptions{ReturnDocument: &ReturnDoc})
+			options.FindOneAndUpdate().SetReturnDocument(options.After))
 
 		doc := map[string]any{}
 
@@ -639,7 +636,7 @@ func (c *Client) xUnlock(ctx context.Context, resourceName, lockId string) error
 		ctx,
 		selector,
 		change,
-		&options.FindOneAndUpdateOptions{ReturnDocument: &ReturnDoc})
+		options.FindOneAndUpdate().SetReturnDocument(options.After))
 
 	doc := map[string]any{}
 
@@ -686,7 +683,7 @@ func (c *Client) sUnlock(ctx context.Context, resourceName, lockId string) error
 		ctx,
 		selector,
 		change,
-		&options.FindOneAndUpdateOptions{ReturnDocument: &ReturnDoc})
+		options.FindOneAndUpdate().SetReturnDocument(options.After))
 
 	doc := map[string]any{}
 
@@ -711,7 +708,7 @@ func lockFromDetails(lockId string, ld LockDetails) lock {
 		LockId:    &lockId,
 		CreatedAt: &now,
 		Acquired:  true,
-		ObjectId:  primitive.NewObjectID(),
+		ObjectId:  bson.NewObjectID(),
 	}
 
 	if ld.Owner != "" {
@@ -727,7 +724,7 @@ func lockFromDetails(lockId string, ld LockDetails) lock {
 	}
 
 	if ld.TTL > 0 {
-		lock.ExpiresAt = new(now.Add(time.Duration(ld.TTL) * time.Second))
+		lock.ExpiresAt = new(now.Add(time.Duration(int64(ld.TTL)) * time.Second)) //nolint:gosec // TTL seconds won't overflow int64
 	}
 
 	return lock
@@ -774,7 +771,7 @@ func calcTTL(expiresAt *time.Time) int64 {
 		return -1
 	}
 
-	delta := expiresAt.Sub(time.Now())
+	delta := time.Until(*expiresAt)
 
 	ttl := int64(delta.Seconds()) // Don't need sub-second granularity.
 	if ttl < 0 {
@@ -793,21 +790,3 @@ func (ls LockStatusesByCreatedAtDesc) Less(i, j int) bool {
 	return ls[i].objectId.String() > ls[j].objectId.String()
 }
 func (ls LockStatusesByCreatedAtDesc) Swap(i, j int) { ls[i], ls[j] = ls[j], ls[i] }
-
-func isDup(err error) bool {
-	if ce, ok := errors.AsType[mongo.CommandError](err); ok {
-		if ce.Code == 11000 {
-			return true
-		}
-	}
-
-	if e, ok := errors.AsType[mongo.WriteException](err); ok {
-		for _, we := range e.WriteErrors {
-			if we.Code == 11000 {
-				return true
-			}
-		}
-	}
-
-	return false
-}

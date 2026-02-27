@@ -179,25 +179,11 @@ make lint.fix   # Auto-fix lint violations
 make test       # Run tests with coverage
 make test.race  # Run tests with race detection
 ```
+## How to Contribute
 
-#### Tests
-By default, tests expect a MongoDB instance to be running at `localhost:27017`, and they write to a db "test" with a randomly generated collection name.
-These defaults can be overwritten with environment variables:
-```
-export TEST_MONGO_URL="your_url"
-export TEST_MONGO_DB="your_db"
-```
-The randomly generated collection is dropped after each test.
+Contributions are welcome! Please read the [contributing guide](docs/CONTRIBUTING.md).
 
-If you have Docker, you can spin up a MongoDB instance for testing:
-```
-docker run --rm -p "27017:27017" mongo
-```
-
-To run a single test:
-```
-go test -tags=safe -v -run TestName ./...
-```
+![Contributors](https://contributors-table.vercel.app/image?repo=foomo/mongo-lock&width=50&columns=15)
 
 ## License
 Copyright 2018 Square, Inc.
