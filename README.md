@@ -1,5 +1,6 @@
 # Distributed Locks in MongoDB
 
+[![Build Status](https://github.com/foomo/mongo-lock/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/foomo/mongo-lock/actions/workflows/test.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/foomo/mongo-lock)](https://goreportcard.com/report/github.com/foomo/mongo-lock)
 [![GoDoc](https://godoc.org/github.com/foomo/mongo-lock?status.svg)](https://godoc.org/github.com/foomo/mongo-lock)
 
@@ -24,7 +25,7 @@ db.locks.createIndex( { resource: 1 }, { unique: true } )
 ```
 
 #### Recommended Indexes
-The following indexes are recommend to help the performance of certain queries:
+The following indexes are recommended to help the performance of certain queries:
 ```
 db.locks.createIndex( { "exclusive.lockId": 1 } )
 db.locks.createIndex( { "exclusive.expiresAt": 1 } )
@@ -45,37 +46,28 @@ package main
 import (
     "context"
     "log"
-    "time"
 
-    "go.mongodb.org/mongo-driver/mongo"
-    "go.mongodb.org/mongo-driver/mongo/options"
-    "go.mongodb.org/mongo-driver/mongo/writeconcern"
+    "go.mongodb.org/mongo-driver/v2/mongo"
+    "go.mongodb.org/mongo-driver/v2/mongo/options"
+    "go.mongodb.org/mongo-driver/v2/mongo/writeconcern"
 
     "github.com/foomo/mongo-lock"
 )
 
 func main() {
-    // Create a Mongo session and set the write mode to "majority".
+    // Create a Mongo client and set the write concern to "majority".
     mongoUrl := "youMustProvideThis"
     database := "dbName"
     collection := "collectionName"
 
-    ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
-    defer cancel()
-
-    m, err := mongo.Connect(ctx, options.Client().
+    m, err := mongo.Connect(options.Client().
         ApplyURI(mongoUrl).
-        SetWriteConcern(writeconcern.New(writeconcern.WMajority())))
-
+        SetWriteConcern(writeconcern.Majority()))
     if err != nil {
         log.Fatal(err)
     }
 
-    defer func() {
-        if err = m.Disconnect(ctx); err != nil {
-            panic(err)
-        }
-    }()
+    ctx := context.Background()
 
     // Configure the client for the database and collection the lock will go into.
     col := m.Database(database).Collection(collection)
@@ -106,8 +98,6 @@ func main() {
         log.Fatal(err)
     }
 }
-
-
 ```
 
 ## How It Works
