@@ -38,6 +38,7 @@ func TestCreateIndexes(t *testing.T) {
 
 	cur, err := collection.Indexes().List(ctx)
 	require.NoError(t, err)
+
 	defer cur.Close(ctx)
 
 	expectedIndexes := []index{
@@ -723,6 +724,7 @@ func setup(t *testing.T) *mongo.Collection {
 	collection := getRandomString(t)
 
 	var err error
+
 	container, err := mongodb.Run(t.Context(), "mongo:latest")
 	require.NoError(t, err)
 
@@ -751,6 +753,8 @@ func setup(t *testing.T) *mongo.Collection {
 }
 
 func getRandomString(t *testing.T) string {
+	t.Helper()
+
 	n := 5
 
 	b := make([]byte, n)
