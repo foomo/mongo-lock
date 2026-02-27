@@ -1,16 +1,17 @@
 # Distributed Locks in MongoDB
 
-[![Build Status](https://travis-ci.org/square/mongo-lock.svg?branch=master)](https://travis-ci.org/square/mongo-lock)
-[![Go Report Card](https://goreportcard.com/badge/github.com/square/mongo-lock)](https://goreportcard.com/report/github.com/square/mongo-lock)
-[![Coverage Status](https://coveralls.io/repos/github/square/mongo-lock/badge.svg?branch=master&)](https://coveralls.io/github/square/mongo-lock?branch=master)
-[![GoDoc](https://godoc.org/github.com/square/mongo-lock?status.svg)](https://godoc.org/github.com/square/mongo-lock)
+[![Go Report Card](https://goreportcard.com/badge/github.com/foomo/mongo-lock)](https://goreportcard.com/report/github.com/foomo/mongo-lock)
+[![GoDoc](https://godoc.org/github.com/foomo/mongo-lock?status.svg)](https://godoc.org/github.com/foomo/mongo-lock)
+
+> This is a fork of the wonderful [github.com/square/mongo-lock](https://github.com/square/mongo-lock) by Square, Inc.
+> The original repository is no longer actively maintained, so this fork continues development under the same [Apache 2.0 license](LICENSE).
 
 This package provides a Go client for creating distributed locks in MongoDB.
 
 ## Setup
 Install the package with "go get".
 ```
-go get "github.com/square/mongo-lock"
+go get "github.com/foomo/mongo-lock"
 ```
 
 In order to use it, you must have an instance of MongoDB running with a collection that can be used to store locks.
@@ -31,7 +32,7 @@ db.locks.createIndex( { "shared.locks.lockId": 1 } )
 db.locks.createIndex( { "shared.locks.expiresAt": 1 } )
 ```
 
-The [Client.CreateIndexes](https://godoc.org/github.com/square/mongo-lock#Client.CreateIndexes) method can be called to create all of the required and recommended indexes.
+The [Client.CreateIndexes](https://godoc.org/github.com/foomo/mongo-lock#Client.CreateIndexes) method can be called to create all of the required and recommended indexes.
 
 #### Recommended Write Concern
 To minimize the risk of losing locks when one or more nodes in your replica set fail, setting the write acknowledgement for the session to "majority" is recommended.
@@ -50,7 +51,7 @@ import (
     "go.mongodb.org/mongo-driver/mongo/options"
     "go.mongodb.org/mongo-driver/mongo/writeconcern"
 
-    "github.com/square/mongo-lock"
+    "github.com/foomo/mongo-lock"
 )
 
 func main() {
@@ -121,11 +122,11 @@ Here is a list of rules that the locking behavior follows
 * A resource cannot have both an exclusive lock and a shared lock on it at the same time.
 * A resource can have no locks on it at all.
 
-[1] It is possible to limit the number of shared locks that can be on a resource at a time (see the docs for [Client.SLock](https://godoc.org/github.com/square/mongo-lock#Client.SLock) for more details).
+[1] It is possible to limit the number of shared locks that can be on a resource at a time (see the docs for [Client.SLock](https://godoc.org/github.com/foomo/mongo-lock#Client.SLock) for more details).
 [2] A resource can't have more than one shared lock on it with the same lockId at a time.
 
 #### Additional Features
-* **TTLs**: You can optionally set a time to live (TTL) when creating a lock. If you do not set one, the lock will not have a TTL. TTLs can be renewed via the [Client.Renew](https://godoc.org/github.com/square/mongo-lock#Client.Renew) method as long as all of the locks associated with a given lockId have a TTL of at least 1 second (or no TTL at all). There is no automatic process to clean up locks that have outlived their TTL, but this package does provide a [Purger](https://godoc.org/github.com/square/mongo-lock#Purger) that can be run in a loop to accomplish this.
+* **TTLs**: You can optionally set a time to live (TTL) when creating a lock. If you do not set one, the lock will not have a TTL. TTLs can be renewed via the [Client.Renew](https://godoc.org/github.com/foomo/mongo-lock#Client.Renew) method as long as all of the locks associated with a given lockId have a TTL of at least 1 second (or no TTL at all). There is no automatic process to clean up locks that have outlived their TTL, but this package does provide a [Purger](https://godoc.org/github.com/foomo/mongo-lock#Purger) that can be run in a loop to accomplish this.
 
 
 ## Schema
@@ -162,34 +163,31 @@ Note: shared locks are stored as an array instead of a map (keyed on lockId) so 
 This helps with the performance of unlocking, renewing, and getting the status of locks.
 
 ## Development
-To work on mongo-lock, clone it to your $GOPATH.
 
-#### Dependencies
-You must use [dep](https://golang.github.io/dep/) to pull in dependencies and populate your local vendor/ directory.
+#### Prerequisites
+This project uses [mise](https://mise.jdx.dev/) to manage tool versions (golangci-lint, lefthook). Install it and run:
 ```
-cd $GOPATH/src/github.com/square/mongo-lock
-dep ensure
+mise install
 ```
 
-#### Tests
-By default, tests expect a MongoDB instance to be running at "localhost:3000", and they write to a db "test" and randomly generated collection name.
-These defaults, however, can be overwritten with environment variables.
+#### Commands
+Run `make help` to see all available targets. Key targets:
 ```
-export TEST_MONGO_URL="your_url"
-export TEST_MONGO_DB="your_db"
+make check      # Full pipeline: tidy, generate, lint, test
+make lint       # Run golangci-lint
+make lint.fix   # Auto-fix lint violations
+make test       # Run tests with coverage
+make test.race  # Run tests with race detection
 ```
-The randomly generated collection is dropped after each test.
+## How to Contribute
 
-If you have docker, you can easily spin up a MongoDB instance for testing by running ``docker run --rm -p "3000:27017" mongo``.
-This will start a MongoDB instance on localhost:3000, and it will remove the image when it's done.
+Contributions are welcome! Please read the [contributing guide](docs/CONTRIBUTING.md).
 
-Run the tests from the root directory of this repo like so:
-```
-go test `go list ./... | grep -v "/vendor/"` --race
-```
+![Contributors](https://contributors-table.vercel.app/image?repo=foomo/mongo-lock&width=50&columns=15)
 
 ## License
 Copyright 2018 Square, Inc.
+Copyright 2026 foomo by bestbytes
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
