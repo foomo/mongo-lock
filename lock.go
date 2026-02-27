@@ -137,7 +137,6 @@ func NewClient(collection *mongo.Collection) *Client {
 // CreateIndexes creates the required and recommended indexes for mongo-lock in
 // the client's database. Indexes that already exist are skipped.
 func (c *Client) CreateIndexes(ctx context.Context) error {
-
 	indexes := []mongo.IndexModel{
 		// Required.
 		{
@@ -157,6 +156,7 @@ func (c *Client) CreateIndexes(ctx context.Context) error {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -164,12 +164,11 @@ func (c *Client) CreateIndexes(ctx context.Context) error {
 // provided lockId. Additional details about the lock can be supplied via
 // LockDetails.
 func (c *Client) XLock(ctx context.Context, resourceName, lockId string, ld LockDetails) error {
-	currentTime := time.Now()
 	selector := bson.M{
 		"resource": resourceName,
 		"$or": []bson.M{
 			{"exclusive.acquired": false},
-			{"exclusive.expiresAt": bson.M{"$lte": &currentTime}},
+			{"exclusive.expiresAt": bson.M{"$lte": new(time.Now())}},
 		},
 		"shared.count": 0,
 	}
@@ -197,12 +196,14 @@ func (c *Client) XLock(ctx context.Context, resourceName, lockId string, ld Lock
 		r,
 		&options.FindOneAndUpdateOptions{Upsert: &UPSERT, ReturnDocument: &ReturnDoc})
 
-	rr := map[string]interface{}{}
+	rr := map[string]any{}
+
 	err := result.Decode(rr)
 	if err != nil {
 		if isDup(err) {
 			return ErrAlreadyLocked
 		}
+
 		return err
 	}
 
@@ -258,13 +259,14 @@ func (c *Client) SLock(ctx context.Context, resourceName, lockId string, ld Lock
 		change,
 		&options.FindOneAndUpdateOptions{Upsert: &UPSERT, ReturnDocument: &ReturnDoc})
 
-	rr := map[string]interface{}{}
-	err := result.Decode(rr)
+	rr := map[string]any{}
 
+	err := result.Decode(rr)
 	if err != nil {
 		if isDup(err) {
 			return ErrAlreadyLocked
 		}
+
 		return err
 	}
 
@@ -286,33 +288,38 @@ func (c *Client) Unlock(ctx context.Context, lockId string) ([]LockStatus, error
 	filter := Filter{
 		LockId: lockId,
 	}
+
 	locks, err := c.Status(ctx, filter)
 	if err != nil {
 		return []LockStatus{}, err
 	}
 
 	// Sort the lock statuses by most recent CreatedAt date first.
-	var sortedLocks LockStatusesByCreatedAtDesc
-	sortedLocks = locks
+	var sortedLocks LockStatusesByCreatedAtDesc = locks
 	sort.Sort(sortedLocks)
 
 	unlocked := []LockStatus{}
+
 	for _, lock := range sortedLocks {
 		var err error
+
 		switch lock.Type {
 		case LOCK_TYPE_EXCLUSIVE:
 			err = c.xUnlock(ctx, lock.Resource, lock.LockId)
 		case LOCK_TYPE_SHARED:
 			err = c.sUnlock(ctx, lock.Resource, lock.LockId)
 		}
+
 		if err != nil {
-			if err == ErrLockNotFound {
+			if errors.Is(err, ErrLockNotFound) {
 				// It's fine if the lock is gone, that's
 				// what we want.
 				continue
 			}
+
 			return unlocked, err
 		}
+
 		unlocked = append(unlocked, lock)
 	}
 
@@ -341,10 +348,10 @@ func (c *Client) Status(ctx context.Context, f Filter) ([]LockStatus, error) {
 			"$lt": f.CreatedBefore,
 		}
 		filterCond = append(filterCond, bson.M{
-			"$lt": []interface{}{"$$lock.createdAt", f.CreatedBefore},
+			"$lt": []any{"$$lock.createdAt", f.CreatedBefore},
 		})
-
 	}
+
 	if !f.CreatedAfter.IsZero() {
 		xQuery["exclusive.createdAt"] = bson.M{
 			"$gt": f.CreatedAfter,
@@ -353,7 +360,7 @@ func (c *Client) Status(ctx context.Context, f Filter) ([]LockStatus, error) {
 			"$gt": f.CreatedAfter,
 		}
 		filterCond = append(filterCond, bson.M{
-			"$gt": []interface{}{"$$lock.createdAt", f.CreatedAfter},
+			"$gt": []any{"$$lock.createdAt", f.CreatedAfter},
 		})
 	}
 
@@ -369,12 +376,13 @@ func (c *Client) Status(ctx context.Context, f Filter) ([]LockStatus, error) {
 			"$lt": ttlTime,
 		}
 		filterCond = append(filterCond, bson.M{
-			"$lt": []interface{}{"$$lock.expiresAt", ttlTime},
+			"$lt": []any{"$$lock.expiresAt", ttlTime},
 		}, bson.M{
 			// Exclude locks without a TTL.
-			"$gt": []interface{}{"$$lock.expiresAt", nil},
+			"$gt": []any{"$$lock.expiresAt", nil},
 		})
 	}
+
 	if f.TTLgte > 0 {
 		ttlTime := time.Now().Add(time.Duration(f.TTLgte) * time.Second)
 		xQuery["exclusive.expiresAt"] = bson.M{
@@ -384,7 +392,7 @@ func (c *Client) Status(ctx context.Context, f Filter) ([]LockStatus, error) {
 			"$gte": ttlTime,
 		}
 		filterCond = append(filterCond, bson.M{
-			"$gte": []interface{}{"$$lock.expiresAt", ttlTime},
+			"$gte": []any{"$$lock.expiresAt", ttlTime},
 		})
 	}
 
@@ -392,7 +400,7 @@ func (c *Client) Status(ctx context.Context, f Filter) ([]LockStatus, error) {
 		xQuery["exclusive.lockId"] = f.LockId
 		sQuery["shared.locks.lockId"] = f.LockId
 		filterCond = append(filterCond, bson.M{
-			"$eq": []interface{}{"$$lock.lockId", f.LockId},
+			"$eq": []any{"$$lock.lockId", f.LockId},
 		})
 	}
 
@@ -400,7 +408,7 @@ func (c *Client) Status(ctx context.Context, f Filter) ([]LockStatus, error) {
 		xQuery["exclusive.owner"] = f.Owner
 		sQuery["shared.locks.owner"] = f.Owner
 		filterCond = append(filterCond, bson.M{
-			"$eq": []interface{}{"$$lock.owner", f.Owner},
+			"$eq": []any{"$$lock.owner", f.Owner},
 		})
 	}
 
@@ -444,6 +452,7 @@ func (c *Client) Status(ctx context.Context, f Filter) ([]LockStatus, error) {
 	}
 
 	resources := []resource{}
+
 	cur, err := c.collection.Aggregate(ctx, query)
 	if err != nil {
 		return []LockStatus{}, err
@@ -453,6 +462,7 @@ func (c *Client) Status(ctx context.Context, f Filter) ([]LockStatus, error) {
 
 	for cur.Next(ctx) {
 		var result resource
+
 		err := cur.Decode(&result)
 		if err != nil {
 			return []LockStatus{}, err
@@ -460,12 +470,14 @@ func (c *Client) Status(ctx context.Context, f Filter) ([]LockStatus, error) {
 
 		resources = append(resources, result)
 	}
+
 	if err := cur.Err(); err != nil {
 		return []LockStatus{}, err
 	}
 
 	// Convert the results set to a []LockStatus.
 	statuses := []LockStatus{}
+
 	for _, r := range resources {
 		if r.Exclusive.Acquired {
 			ls := statusFromLock(r.Exclusive)
@@ -505,6 +517,7 @@ func (c *Client) Renew(ctx context.Context, lockId string, ttl uint) ([]LockStat
 	filter := Filter{
 		LockId: lockId,
 	}
+
 	locks, err := c.Status(ctx, filter)
 	if err != nil {
 		return []LockStatus{}, err
@@ -529,6 +542,7 @@ func (c *Client) Renew(ctx context.Context, lockId string, ttl uint) ([]LockStat
 	statuses := []LockStatus{}
 	selector := bson.M{}
 	change := bson.M{}
+
 	for _, lock := range locks {
 		if lock.Type == LOCK_TYPE_EXCLUSIVE {
 			selector = bson.M{
@@ -580,13 +594,14 @@ func (c *Client) Renew(ctx context.Context, lockId string, ttl uint) ([]LockStat
 			change,
 			&options.FindOneAndUpdateOptions{ReturnDocument: &ReturnDoc})
 
-		doc := map[string]interface{}{}
-		err := result.Decode(doc)
+		doc := map[string]any{}
 
+		err := result.Decode(doc)
 		if err != nil {
 			if len(doc) == 0 {
 				return statuses, ErrLockNotFound
 			}
+
 			return statuses, err
 		}
 
@@ -626,12 +641,14 @@ func (c *Client) xUnlock(ctx context.Context, resourceName, lockId string) error
 		change,
 		&options.FindOneAndUpdateOptions{ReturnDocument: &ReturnDoc})
 
-	doc := map[string]interface{}{}
+	doc := map[string]any{}
+
 	err := result.Decode(doc)
 	if err != nil {
 		if len(doc) == 0 {
 			return ErrLockNotFound
 		}
+
 		return err
 	}
 
@@ -671,12 +688,14 @@ func (c *Client) sUnlock(ctx context.Context, resourceName, lockId string) error
 		change,
 		&options.FindOneAndUpdateOptions{ReturnDocument: &ReturnDoc})
 
-	doc := map[string]interface{}{}
+	doc := map[string]any{}
+
 	err := result.Decode(doc)
 	if err != nil {
 		if len(doc) == 0 {
 			return ErrLockNotFound
 		}
+
 		return err
 	}
 
@@ -698,15 +717,17 @@ func lockFromDetails(lockId string, ld LockDetails) lock {
 	if ld.Owner != "" {
 		lock.Owner = &ld.Owner
 	}
+
 	if ld.Host != "" {
 		lock.Host = &ld.Host
 	}
+
 	if ld.Comment != "" {
 		lock.Comment = &ld.Comment
 	}
+
 	if ld.TTL > 0 {
-		e := now.Add(time.Duration(ld.TTL) * time.Second)
-		lock.ExpiresAt = &e
+		lock.ExpiresAt = new(now.Add(time.Duration(ld.TTL) * time.Second))
 	}
 
 	return lock
@@ -724,15 +745,19 @@ func statusFromLock(l lock) LockStatus {
 	if l.LockId != nil {
 		ls.LockId = *l.LockId
 	}
+
 	if l.Owner != nil {
 		ls.Owner = *l.Owner
 	}
+
 	if l.Host != nil {
 		ls.Host = *l.Host
 	}
+
 	if l.Comment != nil {
 		ls.Comment = *l.Comment
 	}
+
 	if l.CreatedAt != nil {
 		ls.CreatedAt = *l.CreatedAt
 	}
@@ -750,10 +775,12 @@ func calcTTL(expiresAt *time.Time) int64 {
 	}
 
 	delta := expiresAt.Sub(time.Now())
+
 	ttl := int64(delta.Seconds()) // Don't need sub-second granularity.
 	if ttl < 0 {
 		return 0
 	}
+
 	return ttl
 }
 
@@ -768,19 +795,19 @@ func (ls LockStatusesByCreatedAtDesc) Less(i, j int) bool {
 func (ls LockStatusesByCreatedAtDesc) Swap(i, j int) { ls[i], ls[j] = ls[j], ls[i] }
 
 func isDup(err error) bool {
-	var ce mongo.CommandError
-	if errors.As(err, &ce) {
+	if ce, ok := errors.AsType[mongo.CommandError](err); ok {
 		if ce.Code == 11000 {
 			return true
 		}
 	}
-	var e mongo.WriteException
-	if errors.As(err, &e) {
+
+	if e, ok := errors.AsType[mongo.WriteException](err); ok {
 		for _, we := range e.WriteErrors {
 			if we.Code == 11000 {
 				return true
 			}
 		}
 	}
+
 	return false
 }

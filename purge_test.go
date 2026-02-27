@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	lock "github.com/square/mongo-lock"
+	lock "github.com/foomo/mongo-lock"
 )
 
 func TestPurge(t *testing.T) {
@@ -27,10 +27,12 @@ func TestPurge(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
+
 	err = client.XLock(ctx, "resource2", "bbbb", lock.LockDetails{TTL: 1})
 	if err != nil {
 		t.Error(err)
 	}
+
 	err = client.SLock(ctx, "resource3", "cccc", lock.LockDetails{TTL: 1}, -1)
 	if err != nil {
 		t.Error(err)
@@ -41,6 +43,7 @@ func TestPurge(t *testing.T) {
 
 	// Purge the locks.
 	purger := lock.NewPurger(client)
+
 	purged, err := purger.Purge(ctx)
 	if err != nil {
 		t.Error(err)
@@ -50,12 +53,13 @@ func TestPurge(t *testing.T) {
 		t.Errorf("%d locks purged, expected %d", len(purged), 2)
 	}
 
-	var purgedSorted lock.LockStatusesByCreatedAtDesc
-	purgedSorted = purged
+	var purgedSorted lock.LockStatusesByCreatedAtDesc = purged
 	sort.Sort(purgedSorted)
+
 	if purged[0].Resource != "resource3" {
 		t.Errorf("purged[0].Resource = %s, expected %s", purged[0].Resource, "resource3")
 	}
+
 	if purged[1].Resource != "resource2" {
 		t.Errorf("purged[1].Resource = %s, expected %s", purged[1].Resource, "resource2")
 	}
@@ -76,10 +80,12 @@ func TestPurgeSameLockIdDiffTTLs(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
+
 	err = client.XLock(ctx, "resource2", "aaaa", lock.LockDetails{TTL: 30})
 	if err != nil {
 		t.Error(err)
 	}
+
 	err = client.SLock(ctx, "resource3", "aaaa", lock.LockDetails{TTL: 1}, -1)
 	if err != nil {
 		t.Error(err)
@@ -90,6 +96,7 @@ func TestPurgeSameLockIdDiffTTLs(t *testing.T) {
 
 	// Purge the locks.
 	purger := lock.NewPurger(client)
+
 	purged, err := purger.Purge(ctx)
 	if err != nil {
 		t.Error(err)
@@ -99,15 +106,17 @@ func TestPurgeSameLockIdDiffTTLs(t *testing.T) {
 		t.Errorf("%d locks purged, expected %d", len(purged), 3)
 	}
 
-	var purgedSorted lock.LockStatusesByCreatedAtDesc
-	purgedSorted = purged
+	var purgedSorted lock.LockStatusesByCreatedAtDesc = purged
 	sort.Sort(purgedSorted)
+
 	if purged[0].Resource != "resource3" {
 		t.Errorf("purged[0].Resource = %s, expected %s", purged[0].Resource, "resource3")
 	}
+
 	if purged[1].Resource != "resource2" {
 		t.Errorf("purged[1].Resource = %s, expected %s", purged[1].Resource, "resource2")
 	}
+
 	if purged[2].Resource != "resource1" {
 		t.Errorf("purged[2].Resource = %s, expected %s", purged[2].Resource, "resource1")
 	}
