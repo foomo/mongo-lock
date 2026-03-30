@@ -1,6 +1,6 @@
 module github.com/foomo/mongo-lock
 
-go 1.26
+go 1.24.0
 
 require (
 	github.com/go-test/deep v1.1.1

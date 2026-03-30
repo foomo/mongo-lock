@@ -160,11 +160,13 @@ func (c *Client) CreateIndexes(ctx context.Context) error {
 // provided lockId. Additional details about the lock can be supplied via
 // LockDetails.
 func (c *Client) XLock(ctx context.Context, resourceName, lockId string, ld LockDetails) error {
+	now := time.Now()
+
 	selector := bson.M{
 		"resource": resourceName,
 		"$or": []bson.M{
 			{"exclusive.acquired": false},
-			{"exclusive.expiresAt": bson.M{"$lte": new(time.Now())}},
+			{"exclusive.expiresAt": bson.M{"$lte": &now}},
 		},
 		"shared.count": 0,
 	}
@@ -741,7 +743,8 @@ func lockFromDetails(lockId string, ld LockDetails) lock {
 	}
 
 	if ld.TTL > 0 {
-		lock.ExpiresAt = new(now.Add(time.Duration(int64(ld.TTL)) * time.Second)) //nolint:gosec // TTL seconds won't overflow int64
+		tExpire := now.Add(time.Duration(int64(ld.TTL)) * time.Second) //nolint:gosec // TTL seconds won't overflow int64
+		lock.ExpiresAt = &tExpire
 	}
 
 	return lock
