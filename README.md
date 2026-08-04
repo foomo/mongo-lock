@@ -1,8 +1,8 @@
-# Distributed Locks in MongoDB
+[![GoDoc](https://img.shields.io/badge/GoDoc-✓-informational.svg?style=flat-square&logo=go)](https://godoc.org/github.com/foomo/mongo-lock)
+[![Coverage](https://img.shields.io/codecov/c/github/foomo/mongo-lock?style=flat-square&logo=github)](https://app.codecov.io/gh/foomo/mongo-lock)
+[![GitHub Stars](https://img.shields.io/github/stars/foomo/mongo-lock.svg?style=flat-square&logo=github)](https://github.com/foomo/mongo-lock)
 
-[![Build Status](https://github.com/foomo/mongo-lock/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/foomo/mongo-lock/actions/workflows/test.yml)
-[![Go Report Card](https://goreportcard.com/badge/github.com/foomo/mongo-lock)](https://goreportcard.com/report/github.com/foomo/mongo-lock)
-[![GoDoc](https://godoc.org/github.com/foomo/mongo-lock?status.svg)](https://godoc.org/github.com/foomo/mongo-lock)
+# Distributed Locks in MongoDB
 
 > This is a fork of the wonderful [github.com/square/mongo-lock](https://github.com/square/mongo-lock) by Square, Inc.
 > The original repository is no longer actively maintained, so this fork continues development under the same [Apache 2.0 license](LICENSE).
@@ -10,6 +10,7 @@
 This package provides a Go client for creating distributed locks in MongoDB.
 
 ## Setup
+
 Install the package with "go get".
 ```
 go get "github.com/foomo/mongo-lock"
@@ -19,12 +20,14 @@ In order to use it, you must have an instance of MongoDB running with a collecti
 All of the examples here will assume the collection name is "locks", but you can change it to whatever you want.
 
 #### Required Indexes
+
 There is one index that is required in order for this package to work:
 ```
 db.locks.createIndex( { resource: 1 }, { unique: true } )
 ```
 
 #### Recommended Indexes
+
 The following indexes are recommended to help the performance of certain queries:
 ```
 db.locks.createIndex( { "exclusive.lockId": 1 } )
@@ -36,9 +39,11 @@ db.locks.createIndex( { "shared.locks.expiresAt": 1 } )
 The [Client.CreateIndexes](https://godoc.org/github.com/foomo/mongo-lock#Client.CreateIndexes) method can be called to create all of the required and recommended indexes.
 
 #### Recommended Write Concern
+
 To minimize the risk of losing locks when one or more nodes in your replica set fail, setting the write acknowledgement for the session to "majority" is recommended.
 
 ## Usage
+
 Here is an example of how to use this package:
 ```go
 package main
@@ -99,8 +104,8 @@ func main() {
     }
 }
 ```
-
 ## How It Works
+
 This package can be used to create both shared and exclusive locks.
 To create a lock, all you need is the name of a resource (the object that gets locked) and a lockId (lock identifier).
 Multiple locks can be created with the same lockId, which makes it easy to unlock or renew a group of related locks at the same time.
@@ -116,10 +121,11 @@ Here is a list of rules that the locking behavior follows
 [2] A resource can't have more than one shared lock on it with the same lockId at a time.
 
 #### Additional Features
+
 * **TTLs**: You can optionally set a time to live (TTL) when creating a lock. If you do not set one, the lock will not have a TTL. TTLs can be renewed via the [Client.Renew](https://godoc.org/github.com/foomo/mongo-lock#Client.Renew) method as long as all of the locks associated with a given lockId have a TTL of at least 1 second (or no TTL at all). There is no automatic process to clean up locks that have outlived their TTL, but this package does provide a [Purger](https://godoc.org/github.com/foomo/mongo-lock#Purger) that can be run in a loop to accomplish this.
 
-
 ## Schema
+
 Resources are the only documents stored in MongoDB. Locks on a resource are stored within the resource documents, like so:
 ```
 {
@@ -155,12 +161,14 @@ This helps with the performance of unlocking, renewing, and getting the status o
 ## Development
 
 #### Prerequisites
+
 This project uses [mise](https://mise.jdx.dev/) to manage tool versions (golangci-lint, lefthook). Install it and run:
 ```
 mise install
 ```
 
 #### Commands
+
 Run `make help` to see all available targets. Key targets:
 ```
 make check      # Full pipeline: tidy, generate, lint, test
